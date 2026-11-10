@@ -251,12 +251,15 @@ function aFormatoSistema(s) {
   var o = { ubicacion: s.campo, anio: s.anio, sem: s.sem }; CLAVES.forEach(function (k) { o[k] = +s.v[k] || 0; });
   var d = s.d; ['pctAccesos', 'pctSellos', 'pctBitacoras', 'indiceRobos', 'pctRondines', 'totalIncidencias', 'puntuacionRiesgo', 'nivel', 'areaEnfoque', 'accionRecomendada'].forEach(function (k) { o[k] = d[k]; });
   var obs = s.dias.filter(function (x) { return x.obs; }).map(function (x) { return fmtF(x.fecha) + ': ' + x.obs; }).join(' | ');
-  if (obs) o.observaciones = obs; o.diasCapturados = s.dias.length; o.guardia = s.dias[s.dias.length - 1].guardia || ''; o._own = true; o._ownId = s.id; return o;
+  if (obs) o.observaciones = obs; o.diasCapturados = s.dias.length; o.guardia = s.dias[s.dias.length - 1].guardia || ''; o._own = true; o._ownId = s.id; o._exp = EXP_TS; o._folio = EXP_FOLIO; return o;
 }
 function nombreArchivo(lista) { var cs = {}; lista.forEach(function (r) { cs[r.campo] = 1; }); var k = Object.keys(cs), d = new Date();
-  return 'resumen_semanal_operativo_' + (k.length === 1 ? k[0].replace(/\s+/g, '_') : 'varios_campos') + '_' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds()) + '.json'; }
+  return 'resumen_semanal_operativo_' + (k.length === 1 ? k[0].replace(/\s+/g, '_') : 'varios_campos') + '_' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds()) + '_envio' + ('000' + EXP_FOLIO).slice(-4) + '.json'; }
+var EXP_TS = 0, EXP_FOLIO = 0;
 function construirArchivo(todas) {
   var l = semanas().filter(function (s) { return todas || s.pend; }); if (!l.length) return null;
+  // cada archivo lleva un folio consecutivo y la hora exacta: nombre distinto en cada envío y el ERP sabe cuál es el más reciente
+  EXP_TS = Date.now(); EXP_FOLIO = (parseInt(ls('op_folio'), 10) || 0) + 1; ls('op_folio', String(EXP_FOLIO));
   return { lista: l, nombre: nombreArchivo(l), blob: new Blob([JSON.stringify(l.map(aFormatoSistema), null, 1)], { type: 'application/json' }) };
 }
 async function marcar(semanasExp) { for (var i = 0; i < semanasExp.length; i++) for (var j = 0; j < semanasExp[i].dias.length; j++) { var d = semanasExp[i].dias[j]; d.exportado = true; d.tsExportado = Date.now(); await poner(d); } await cargar(); dibujar(); }
