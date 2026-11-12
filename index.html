@@ -102,8 +102,47 @@ table{width:100%;border-collapse:collapse;font-size:13.5px}td,th{padding:6px 8px
 </main>
 
 <script>
+/* Catálogo oficial de campos/ubicaciones de Rancho Agrícola La Memoria y reconocimiento de abreviaturas.
+   Mismo código en el ERP y en las apps de guardia (RONDINES, CONTROL-ACCESO, INCIDENCIAS, OPERATIVO).
+   Alias: cada texto se compara sin acentos ni mayúsculas; "a+b" exige que aparezcan ambas palabras.
+   El ORDEN importa: lo más específico va primero (p. ej. Galeras Palomas antes que Campo Palomas). */
+(function (g) {
+  'use strict';
+  // Lista en el orden en que se muestra; "p" es la prioridad al reconocer (menor = se revisa primero).
+  const LISTA = [
+    { nombre: 'Campo Palomas', p: 90, alias: ['palomas', 'rlm', 'rancho la memoria', 'la memoria', 'campo rlm'] },
+    { nombre: 'Galeras Palomas', p: 2, alias: ['galeras+palomas', 'galera+palomas', 'galeras+rlm', 'galera+rlm', 'galeras+rancho'] },
+    { nombre: 'Almacén General', p: 4, alias: ['almacen general', 'almacen gral', 'alm general', 'alm gral', 'almacen', 'almacenes', 'ag', 'a g'] },
+    { nombre: 'Empaque', p: 80, alias: ['empaque', 'empacadora'] },
+    { nombre: 'Galeras Empaque', p: 3, alias: ['galeras+empaque', 'galera+empaque', 'empaque+galeras', 'empaque+galera', 'galeras', 'galera'] },
+    { nombre: 'Campo Santa Fe', p: 70, alias: ['santa fe', 'santafe', 'sta fe'] },
+    { nombre: 'Campo El Milagro Uno', p: 7, alias: ['milagro uno', 'milagro 1', 'milagro i', 'milagro1', 'milagro'] },
+    { nombre: 'Campo El Milagro Dos', p: 6, alias: ['milagro dos', 'milagro 2', 'milagro ii', 'milagro2'] },
+    { nombre: 'Campo El Milagro Tres', p: 5, alias: ['milagro tres', 'milagro 3', 'milagro iii', 'milagro3'] },
+    { nombre: 'Almacén El Milagro Uno', p: 1, alias: ['almacen+milagro', 'alm+milagro', 'bodega+milagro'] }
+  ];
+
+  const norm = t => String(t == null ? '' : t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  function coincide(n, alias) {
+    return String(alias).split('+').every(p => n.includes(' ' + norm(p) + ' '));
+  }
+  // Devuelve el nombre oficial o '' si no se reconoce. 'lista' permite usar una lista personalizada (misma forma).
+  function oficial(txt, lista) {
+    const n = ' ' + norm(txt) + ' ';
+    if (n.trim() === '') return '';
+    const orden = (lista || LISTA).slice().sort((a, b) => (a.p == null ? 50 : a.p) - (b.p == null ? 50 : b.p));
+    for (const c of orden) {
+      if (coincide(n, c.nombre)) return c.nombre;
+      for (const a of (c.alias || [])) if (coincide(n, a)) return c.nombre;
+    }
+    return '';
+  }
+  g.CAMPOS_LM = { lista: LISTA, nombres: LISTA.map(c => c.nombre), oficial, norm };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
 'use strict';
-var CAMPOS = ['Palomas', 'El Milagro Uno', 'El Milagro Dos', 'El Milagro Tres', 'Santa Fe', 'Empaque'];
+var CAMPOS = CAMPOS_LM.nombres.slice(); // lista oficial; los guardias solo eligen de la lista desplegable
 var GRUPOS = [["Control de accesos", [["regProg", "Rev. físicas regionales programadas"], ["regReal", "Rev. físicas regionales realizadas"], ["acasProg", "Rev. físicas acasillados programadas"], ["acasReal", "Rev. físicas acasillados realizadas"], ["visProg", "Rev. físicas visitantes programadas"], ["visReal", "Rev. físicas visitantes realizadas"], ["provProg", "Rev. físicas proveedores programadas"], ["provReal", "Rev. físicas proveedores realizadas"], ["saludosEsp", "Saludos esperados"], ["saludosReal", "Saludos realizados"], ["vehProg", "Rev. vehiculares programadas"], ["vehReal", "Rev. vehiculares realizadas"], ["puertasAbiertas", "Puertas abiertas detectadas"], ["accesosSinRev", "Accesos sin revisión"], ["protocolosInc", "Protocolos incorrectos"], ["accesosAbiertos", "Accesos abiertos"], ["trailers", "Tráilers con fruta"], ["sellosRev", "Sellos revisados"], ["cajasSinSello", "Cajas sin sellos de seguridad"], ["roboComb", "Robos de combustible"], ["roboFruta", "Robos de fruta"], ["roboMat", "Robos de materiales"], ["golosinas", "Golosinas diversas (decomiso)"], ["cigarros", "Cigarros (decomiso)"], ["articulos", "Artículos personales (decomiso)"], ["drogas", "Drogas (decomiso)"], ["sinFicha", "No cuentan con ficha"], ["envasesVidrio", "Envases de vidrio (decomiso)"]]], ["Rondines", [["rondProg", "Rondines programados"], ["rondReal", "Rondines realizados"], ["evidencia", "Evidencia fotográfica"], ["novDet", "Novedades detectadas"], ["novCorr", "Novedades corregidas"], ["acoso", "Acoso sexual (reportes)"], ["faltasResp", "Faltas de respeto a ingenieros"], ["discusion", "Discusión entre personas"], ["excesoVel", "Exceso de velocidad"], ["maltratoJorn", "Mal trato a jornaleros"]]], ["Inocuidad", [["bitTotales", "Bitácoras totales"], ["bitMaltratadas", "Bitácoras maltratadas"], ["bitBuenEstado", "Bitácoras en buen estado"]]]];
 var CLAVES = []; GRUPOS.forEach(function (g) { g[1].forEach(function (f) { CLAVES.push(f[0]); }); });
 var ETQ = {}; GRUPOS.forEach(function (g) { g[1].forEach(function (f) { ETQ[f[0]] = f[1]; }); });
@@ -168,7 +207,7 @@ function semanas() {
 function iniciar() {
   $('#gCampo').innerHTML = CAMPOS.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join(''); $('#fCampo').innerHTML = $('#gCampo').innerHTML;
   $('#dlGuardias').innerHTML = nombres().map(function (g) { return '<option value="' + esc(g) + '">'; }).join('');
-  $('#gNombre').value = ls('op_guardia'); if (ls('op_campo')) $('#gCampo').value = ls('op_campo');
+  $('#gNombre').value = ls('op_guardia'); if (ls('op_campo')) $('#gCampo').value = CAMPOS_LM.oficial(ls('op_campo')) || CAMPOS[0];
   $('#gruposHTML').innerHTML = GRUPOS.map(function (g) { return '<h3 class="sec">' + esc(g[0]) + '</h3><div class="num">' + g[1].map(function (f) { return '<label>' + esc(f[1]) + ' <b>*</b><input type="number" inputmode="numeric" min="0" step="1" data-k="' + f[0] + '" value="0"></label>'; }).join('') + '</div>'; }).join('');
   Array.prototype.forEach.call(document.querySelectorAll('[data-k]'), function (i) { i.onfocus = function () { i.select(); }; i.oninput = indicadores; });
 }
@@ -286,7 +325,7 @@ $('#bCancelar').onclick = cerrarForm; $('#bGuardar').onclick = guardar; $('#fFec
 $('#bExpPend').onclick = function () { exportar(false); }; $('#bExpTodo').onclick = function () { exportar(true); }; $('#bComp').onclick = compartir;
 $('#tPend').onclick = function () { filtro = 'pend'; dibujar(); }; $('#tTodo').onclick = function () { filtro = 'todo'; dibujar(); };
 iniciar();
-abrirDB().then(cargar).then(function () { dibujar(); if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); });
+abrirDB().then(cargar).then(async function () { for (var i = 0; i < DIAS.length; i++) { var d = DIAS[i], o = CAMPOS_LM.oficial(d.campo); if (o && o !== d.campo) { var nid = idDia(d.fecha, o), ya = DIAS.filter(function (x) { return x.id === nid && x !== d; })[0]; await borrar(d.id); if (!ya) { d.campo = o; d.id = nid; await poner(d); } } } await cargar(); dibujar(); if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () { });
 </script>
 </body>
