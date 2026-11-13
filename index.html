@@ -51,6 +51,9 @@ textarea{min-height:70px;resize:vertical}input:disabled{opacity:.7}
 .mod{background:var(--panel);border:1px solid var(--borde);border-radius:14px 14px 0 0;width:min(820px,100%);max-height:92vh;display:flex;flex-direction:column}
 .mod h2{margin:0;padding:14px;border-bottom:1px solid var(--borde);font-size:16px;display:flex;justify-content:space-between;gap:8px}.mod .c{padding:14px;overflow:auto}
 table{width:100%;border-collapse:collapse;font-size:13.5px}td,th{padding:6px 8px;border-bottom:1px solid var(--borde);text-align:left}td:last-child,th:last-child{text-align:right}
+.rs{width:100%;border-collapse:collapse;font-size:13.5px;margin-bottom:4px}.rs th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--mut);text-align:right;padding:5px 6px;border-bottom:1px solid var(--borde)}.rs th:first-child{text-align:left}.rs td{text-align:right;padding:6px}.rs td:first-child{text-align:left}.rs td b{font-size:15px}.rs .z{color:var(--mut)}
+.dias7{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin:8px 0 4px}.dias7 div{border:1px solid var(--borde);border-radius:8px;padding:5px 0;text-align:center;font-size:12px;background:var(--panel2);color:var(--mut)}.dias7 div.si{border-color:#245a2e;background:rgba(63,185,80,.12);color:var(--verde);font-weight:700}.dias7 div small{display:block;font-size:10px;opacity:.8}
+.cnt{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:6px}@media(min-width:640px){.cnt{grid-template-columns:repeat(3,1fr)}}.cnt div{display:flex;justify-content:space-between;gap:8px;background:#161c26;border:1px solid var(--borde);border-radius:8px;padding:6px 9px;font-size:13px}.cnt div.z{color:var(--mut)}
 </style>
 </head>
 <body>
@@ -68,6 +71,16 @@ table{width:100%;border-collapse:collapse;font-size:13.5px}td,th{padding:6px 8px
     <div class="barra" style="margin-bottom:14px"><button class="btn" id="bNueva" style="font-size:16px">+ Captura del día</button></div>
     <div class="card"><h2>Semáforo operativo por campo <small class="nota">(última semana capturada)</small></h2><div class="sem" id="semaforo"></div>
       <h2 style="margin-top:14px">Tendencia de la puntuación de riesgo · <span id="tCampo"></span></h2><div id="tendencia"></div></div>
+    <div class="card" id="cResumen">
+      <h2>Resumen de la semana <small class="nota">(suma de todos los días capturados)</small></h2>
+      <div class="fila">
+        <label>Campo<select id="rCampo"></select></label>
+        <label>Semana<select id="rSemana"></select></label>
+      </div>
+      <div id="rCuerpo"></div>
+      <div class="barra" style="margin-top:12px"><button class="btn" id="bEnviarSem" style="font-size:16px">📤 Enviar registro semanal</button></div>
+      <div id="msgSem"></div>
+    </div>
     <div class="card">
       <h2>Enviar el resumen semanal al supervisor</h2>
       <p class="nota" id="resumenEnvio"></p>
@@ -158,6 +171,12 @@ var DIA = 864e5, slug = function (t) { return t.toLowerCase().normalize('NFD').r
 function lunesDe(d) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
 function semISO(d) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12); x.setDate(x.getDate() + 3 - ((x.getDay() + 6) % 7)); var j = new Date(x.getFullYear(), 0, 4, 12); return { anio: x.getFullYear(), sem: 1 + Math.round(((x - j) / DIA - 3 + ((j.getDay() + 6) % 7)) / 7) }; }
 
+// Numeración de semanas de la empresa: la semana 1 empieza el primer lunes del año (en 2026: 5 de enero; 9 al 15 de noviembre = semana 45)
+function semEmp(lunes) { var y = lunes.getFullYear(), d1 = new Date(y, 0, 1, 12).getDay(), off = d1 === 0 ? 1 : (d1 === 1 ? 0 : 8 - d1), pm = new Date(y, 0, 1 + off, 12); return Math.min(52, Math.max(1, Math.floor(Math.round((new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate(), 12) - pm) / DIA) / 7) + 1)); }
+var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'], DSEM = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+var fCorta = function (d) { return d.getDate() + ' ' + MESES[d.getMonth()].slice(0, 3); };
+function rangoSem(ini) { var a = deISO(ini), b = new Date(a.getTime() + 6 * DIA); return a.getMonth() === b.getMonth() ? p2(a.getDate()) + ' al ' + p2(b.getDate()) + ' de ' + MESES[b.getMonth()] : p2(a.getDate()) + ' de ' + MESES[a.getMonth()] + ' al ' + p2(b.getDate()) + ' de ' + MESES[b.getMonth()]; }
+
 // ---------- indicadores (misma metodología del panel de control operativo) ----------
 function derivar(v) {
   var n = function (k) { return +v[k] || 0; }, r = {};
@@ -200,7 +219,7 @@ function semanas() {
   return Object.keys(m).map(function (k) {
     var s = m[k]; s.dias.sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; });
     var ini = lunesDe(deISO(s.dias[0].fecha)); s.ini = iso(ini); s.fin = iso(new Date(ini.getTime() + 6 * DIA));
-    s.pend = s.dias.some(function (d) { return !d.exportado; }); s.d = derivar(s.v); s.id = 'own_' + s.anio + '_' + s.sem + '_' + slug(s.campo); return s;
+    s.semEmp = semEmp(ini); s.pend = s.dias.some(function (d) { return !d.exportado; }); s.d = derivar(s.v); s.id = 'own_' + s.anio + '_' + s.sem + '_' + slug(s.campo); return s;
   }).sort(function (a, b) { return b.anio - a.anio || b.sem - a.sem || (a.campo < b.campo ? -1 : 1); });
 }
 
@@ -224,16 +243,17 @@ function tendenciaSVG(campo) {
   return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto">' + g + '<polyline points="' + pts + '" fill="none" stroke="#e08a4b" stroke-width="2"/>' + pt + '</svg><p class="nota">Puntuación de riesgo operativo por semana (0 = sin riesgo, 100 = crítico).</p>';
 }
 function dibujar() {
+  if ($('#rCampo').options.length === 0) { $('#rCampo').innerHTML = $('#gCampo').innerHTML; } if ($('#rCampo').value !== $('#gCampo').value) $('#rCampo').value = $('#gCampo').value; llenarSemanas(); dibujarResumen();
   var S = semanas(), pend = S.filter(function (s) { return s.pend; });
   $('#cPend').textContent = pend.length + (pend.length === 1 ? ' semana pendiente' : ' semanas pendientes'); $('#cPend').className = 'pill ' + (pend.length ? 'pend' : 'ok');
   $('#resumenEnvio').textContent = pend.length ? 'Hay ' + pend.length + ' resumen(es) semanal(es) con información sin enviar al supervisor.' : (S.length ? 'Todos los resúmenes semanales ya fueron exportados.' : 'Aún no hay capturas en este teléfono.');
   var ult = {}; S.forEach(function (s) { if (!ult[s.campo]) ult[s.campo] = s; });
-  $('#semaforo').innerHTML = Object.keys(ult).length ? CAMPOS.filter(function (c) { return ult[c]; }).concat(Object.keys(ult).filter(function (c) { return CAMPOS.indexOf(c) < 0; })).map(function (c) { var s = ult[c]; return '<div><small>' + esc(c) + ' · sem ' + s.sem + '</small><b>' + s.d.puntuacionRiesgo.toFixed(1) + '</b><span class="pill ' + s.d.nivel + '">' + s.d.nivel + '</span></div>'; }).join('') : '<p class="nota">Sin datos todavía.</p>';
+  $('#semaforo').innerHTML = Object.keys(ult).length ? CAMPOS.filter(function (c) { return ult[c]; }).concat(Object.keys(ult).filter(function (c) { return CAMPOS.indexOf(c) < 0; })).map(function (c) { var s = ult[c]; return '<div><small>' + esc(c) + ' · sem ' + s.semEmp + '</small><b>' + s.d.puntuacionRiesgo.toFixed(1) + '</b><span class="pill ' + s.d.nivel + '">' + s.d.nivel + '</span></div>'; }).join('') : '<p class="nota">Sin datos todavía.</p>';
   $('#tCampo').textContent = $('#gCampo').value; $('#tendencia').innerHTML = tendenciaSVG($('#gCampo').value);
   $('#tPend').className = filtro === 'pend' ? 'on' : ''; $('#tTodo').className = filtro === 'todo' ? 'on' : '';
   var l = filtro === 'pend' ? pend : S;
   $('#lista').innerHTML = l.length ? l.map(function (s) {
-    return '<div class="reg"><div class="t"><span>' + esc(s.campo) + ' · semana ' + s.sem + ' / ' + s.anio + '</span><span class="pill ' + (s.pend ? 'pend' : 'ok') + '">' + (s.pend ? '🟡 Pendiente' : '✅ Enviada') + '</span></div>' +
+    return '<div class="reg"><div class="t"><span>' + esc(s.campo) + ' · semana ' + s.semEmp + ' / ' + s.anio + '</span><span class="pill ' + (s.pend ? 'pend' : 'ok') + '">' + (s.pend ? '🟡 Pendiente' : '✅ Enviada') + '</span></div>' +
       '<div class="s">' + fmtF(s.ini) + ' al ' + fmtF(s.fin) + ' · ' + s.dias.length + ' de 7 días capturados' + (s.dias.length < 7 ? ' ⚠️' : '') + '</div>' +
       '<div class="met"><span class="pill ' + s.d.nivel + '">Riesgo ' + s.d.puntuacionRiesgo.toFixed(1) + ' · ' + s.d.nivel + '</span><span>Rondines ' + pc(s.d.pctRondines) + '</span><span>Accesos ' + pc(s.d.pctAccesos) + '</span><span>Bitácoras ' + pc(s.d.pctBitacoras) + '</span></div>' +
       '<div class="a"><button class="btn sec mini" data-v="' + esc(s.key) + '">Ver resumen y días</button></div></div>';
@@ -249,7 +269,7 @@ function verSemana(key) {
   var tabla = GRUPOS.map(function (g) { return '<h3 class="sec">' + esc(g[0]) + '</h3><table>' + g[1].map(function (f) { return '<tr><td>' + esc(f[1]) + '</td><td><b>' + (s.v[f[0]] || 0) + '</b></td></tr>'; }).join('') + '</table>'; }).join('');
   var d = s.d, ind = '<div class="met" style="margin-bottom:8px"><span class="pill ' + d.nivel + '">Riesgo ' + d.puntuacionRiesgo.toFixed(1) + ' · ' + d.nivel + '</span><span>Accesos ' + pc(d.pctAccesos) + '</span><span>Sellos ' + pc(d.pctSellos) + '</span><span>Bitácoras ' + pc(d.pctBitacoras) + '</span><span>Rondines ' + pc(d.pctRondines) + '</span><span>Robos ' + d.indiceRobos + '</span><span>Incidencias operativas ' + d.totalIncidencias + '</span></div><p class="nota">Área de enfoque: <b>' + esc(d.areaEnfoque) + '</b>. ' + esc(d.accionRecomendada) + '</p>';
   var dias = '<h3 class="sec">Días capturados (' + s.dias.length + ' de 7)</h3>' + s.dias.map(function (x) { return '<div class="reg"><div class="t"><span>' + fmtF(x.fecha) + '</span><span class="pill ' + (x.exportado ? 'ok' : 'pend') + '">' + (x.exportado ? '✅ Enviado' : '🟡 Pendiente') + '</span></div>' + (x.obs ? '<div class="s">' + esc(x.obs) + '</div>' : '') + '<div class="a"><button class="btn sec mini" data-e="' + esc(x.id) + '">Editar</button><button class="btn peligro mini" data-b="' + esc(x.id) + '">Eliminar</button></div></div>'; }).join('');
-  var m = modal(s.campo + ' · semana ' + s.sem + ' / ' + s.anio, '<p class="nota">' + fmtF(s.ini) + ' al ' + fmtF(s.fin) + '. Este es el resumen que se envía al supervisor (suma de los días).</p>' + ind + dias + tabla);
+  var m = modal(s.campo + ' · semana ' + s.semEmp + ' / ' + s.anio, '<p class="nota">' + fmtF(s.ini) + ' al ' + fmtF(s.fin) + '. Este es el resumen que se envía al supervisor (suma de los días).</p>' + ind + dias + tabla);
   Array.prototype.forEach.call(m.querySelectorAll('[data-e]'), function (b) { b.onclick = function () { m.remove(); abrirForm(b.dataset.e); }; });
   Array.prototype.forEach.call(m.querySelectorAll('[data-b]'), function (b) { b.onclick = function () { if (confirm('¿Eliminar la captura de este día?')) borrar(b.dataset.b).then(cargar).then(function () { m.remove(); dibujar(); }); }; });
 }
@@ -290,13 +310,13 @@ function aFormatoSistema(s) {
   var o = { ubicacion: s.campo, anio: s.anio, sem: s.sem }; CLAVES.forEach(function (k) { o[k] = +s.v[k] || 0; });
   var d = s.d; ['pctAccesos', 'pctSellos', 'pctBitacoras', 'indiceRobos', 'pctRondines', 'totalIncidencias', 'puntuacionRiesgo', 'nivel', 'areaEnfoque', 'accionRecomendada'].forEach(function (k) { o[k] = d[k]; });
   var obs = s.dias.filter(function (x) { return x.obs; }).map(function (x) { return fmtF(x.fecha) + ': ' + x.obs; }).join(' | ');
-  if (obs) o.observaciones = obs; o.diasCapturados = s.dias.length; o.guardia = s.dias[s.dias.length - 1].guardia || ''; o._own = true; o._ownId = s.id; o._exp = EXP_TS; o._folio = EXP_FOLIO; return o;
+  if (obs) o.observaciones = obs; o.diasCapturados = s.dias.length; o.guardia = s.dias[s.dias.length - 1].guardia || ''; o.fechaInicio = s.ini; o.fechaFin = s.fin; o.semEmpresa = s.semEmp; o._own = true; o._ownId = s.id; o._exp = EXP_TS; o._folio = EXP_FOLIO; return o;
 }
 function nombreArchivo(lista) { var cs = {}; lista.forEach(function (r) { cs[r.campo] = 1; }); var k = Object.keys(cs), d = new Date();
   return 'resumen_semanal_operativo_' + (k.length === 1 ? k[0].replace(/\s+/g, '_') : 'varios_campos') + '_' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds()) + '_envio' + ('000' + EXP_FOLIO).slice(-4) + '.json'; }
 var EXP_TS = 0, EXP_FOLIO = 0;
-function construirArchivo(todas) {
-  var l = semanas().filter(function (s) { return todas || s.pend; }); if (!l.length) return null;
+function construirArchivo(todas, solo) {
+  var l = solo || semanas().filter(function (s) { return todas || s.pend; }); if (!l.length) return null;
   // cada archivo lleva un folio consecutivo y la hora exacta: nombre distinto en cada envío y el ERP sabe cuál es el más reciente
   EXP_TS = Date.now(); EXP_FOLIO = (parseInt(ls('op_folio'), 10) || 0) + 1; ls('op_folio', String(EXP_FOLIO));
   return { lista: l, nombre: nombreArchivo(l), blob: new Blob([JSON.stringify(l.map(aFormatoSistema), null, 1)], { type: 'application/json' }) };
@@ -318,10 +338,46 @@ async function compartir() {
   } else aviso($('#msgEnvio'), 'Este teléfono no permite compartir archivos desde aquí. Use "Exportar semanas pendientes" y envíe el archivo descargado.', 1);
 }
 
+// ---------- resumen de la semana (totales) y envío del registro semanal ----------
+var PARES = [['Revisiones físicas regionales', 'regProg', 'regReal'], ['Revisiones físicas acasillados', 'acasProg', 'acasReal'], ['Revisiones físicas visitantes', 'visProg', 'visReal'], ['Revisiones físicas proveedores', 'provProg', 'provReal'], ['Saludos (esperados / realizados)', 'saludosEsp', 'saludosReal'], ['Revisiones vehiculares', 'vehProg', 'vehReal'], ['Rondines', 'rondProg', 'rondReal'], ['Tráilers con fruta / sellos revisados', 'trailers', 'sellosRev'], ['Bitácoras totales / en buen estado', 'bitTotales', 'bitBuenEstado'], ['Novedades detectadas / corregidas', 'novDet', 'novCorr']];
+var CONTEOS = ['evidencia', 'puertasAbiertas', 'accesosSinRev', 'protocolosInc', 'accesosAbiertos', 'cajasSinSello', 'bitMaltratadas', 'roboComb', 'roboFruta', 'roboMat', 'golosinas', 'cigarros', 'articulos', 'drogas', 'sinFicha', 'envasesVidrio', 'acoso', 'faltasResp', 'discusion', 'excesoVel', 'maltratoJorn'];
+function semSel() { var c = $('#rCampo').value, ini = $('#rSemana').value; return { campo: c, ini: ini, s: semanas().filter(function (x) { return x.campo === c && x.ini === ini; })[0] || null }; }
+function llenarSemanas() {
+  var hoy = lunesDe(new Date()), inis = {}, i; for (i = 0; i < 10; i++) inis[iso(new Date(hoy.getTime() - i * 7 * DIA))] = 1; DIAS.forEach(function (d) { inis[iso(lunesDe(deISO(d.fecha)))] = 1; });
+  var prev = $('#rSemana').value, l = Object.keys(inis).sort().reverse();
+  $('#rSemana').innerHTML = l.map(function (k) { return '<option value="' + k + '">Semana ' + semEmp(deISO(k)) + ' · ' + rangoSem(k) + (k === iso(hoy) ? ' (en curso)' : '') + '</option>'; }).join('');
+  $('#rSemana').value = inis[prev] ? prev : iso(hoy);
+}
+function dibujarResumen() {
+  var q = semSel(), s = q.s, ini = deISO(q.ini), v = s ? s.v : {}, n = function (k) { return +v[k] || 0; };
+  var fin = new Date(ini.getTime() + 6 * DIA), cerrada = fin.getTime() < Date.now() - DIA, capt = {}; if (s) s.dias.forEach(function (d) { capt[d.fecha] = 1; });
+  var tira = '<div class="dias7">' + DSEM.map(function (l, i) { var f = new Date(ini.getTime() + i * DIA), k = iso(f); return '<div class="' + (capt[k] ? 'si' : '') + '">' + l + '<small>' + f.getDate() + '</small>' + (capt[k] ? '✓' : '·') + '</div>'; }).join('') + '</div>';
+  var nd = s ? s.dias.length : 0, falta = []; for (var i = 0; i < 7; i++) { var f = new Date(ini.getTime() + i * DIA); if (!capt[iso(f)] && f.getTime() < Date.now()) falta.push(DSEM[i] + ' ' + f.getDate()); }
+  var tabla = '<table class="rs"><thead><tr><th>Concepto</th><th>Programadas</th><th>Realizadas</th><th>%</th></tr></thead><tbody>' + PARES.map(function (r) { var a = n(r[1]), b = n(r[2]); var z = !a && !b; return '<tr' + (z ? ' class="z"' : '') + '><td>' + esc(r[0]) + '</td><td>' + (z ? '—' : '<b>' + a + '</b>') + '</td><td>' + (z ? '—' : '<b>' + b + '</b>') + '</td><td>' + (a ? pct(b, a) : '—') + '</td></tr>'; }).join('') + '</tbody></table>';
+  var cn = '<div class="cnt">' + CONTEOS.map(function (k) { return '<div class="' + (n(k) ? '' : 'z') + '"><span>' + esc(ETQ[k]) + '</span><b>' + n(k) + '</b></div>'; }).join('') + '</div>';
+  var d = derivar(v), est = !s ? '' : (s.pend ? '<span class="pill pend">🟡 Pendiente de enviar</span>' : '<span class="pill ok">✅ Enviado</span>');
+  var ult = 0; if (s) s.dias.forEach(function (x) { if (x.tsExportado > ult) ult = x.tsExportado; });
+  $('#rCuerpo').innerHTML = '<div class="reg" style="margin-top:4px"><div class="t"><span>Semana ' + semEmp(ini) + ' · ' + rangoSem(q.ini) + '</span>' + est + '</div><div class="s">' + esc(q.campo) + ' · ' + nd + ' de 7 días capturados' + (falta.length ? ' · faltan: ' + falta.join(', ') : '') + (ult ? ' · último envío ' + fCorta(new Date(ult)) + ' ' + p2(new Date(ult).getHours()) + ':' + p2(new Date(ult).getMinutes()) : '') + '</div>' + tira + '</div>' +
+    (s ? '<h3 class="sec">Totales de la semana</h3>' + tabla + '<h3 class="sec">Conteos de la semana</h3>' + cn + '<div class="met" style="margin-top:10px"><span class="pill ' + d.nivel + '">Riesgo ' + d.puntuacionRiesgo.toFixed(1) + ' · ' + d.nivel + '</span><span>Accesos ' + pc(d.pctAccesos) + '</span><span>Rondines ' + pc(d.pctRondines) + '</span><span>Bitácoras ' + pc(d.pctBitacoras) + '</span></div>' : '<div class="vacio">Aún no hay capturas de ' + esc(q.campo) + ' en esta semana.</div>');
+  $('#bEnviarSem').disabled = !s; $('#bEnviarSem').textContent = s && !s.pend ? '📤 Volver a enviar registro semanal' : '📤 Enviar registro semanal';
+}
+async function enviarSemana() {
+  var q = semSel(), s = q.s, msg = $('#msgSem'); if (!s) { aviso(msg, 'No hay capturas de esa semana para enviar.', 1); return; }
+  if (s.dias.length < 7 && deISO(s.fin).getTime() >= Date.now() - DIA && !confirm('La semana todavía no tiene los 7 días (' + s.dias.length + ' de 7). ¿Enviar el registro con lo capturado hasta hoy? Si después captura más días, vuelva a enviarlo: reemplaza al anterior.')) return;
+  var a = construirArchivo(false, [s]), f = new File([a.blob], a.nombre, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [f] })) {
+    try { await navigator.share({ files: [f], title: 'Registro semanal operativo', text: 'Registro semanal de control operativo: ' + s.campo + ', semana ' + s.semEmp + ' (' + rangoSem(s.ini) + ')' }); await marcar([s]); aviso(msg, 'Registro semanal enviado: ' + s.campo + ', semana ' + s.semEmp + '.'); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  var u = URL.createObjectURL(a.blob), l = document.createElement('a'); l.href = u; l.download = a.nombre; document.body.appendChild(l); l.click(); l.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+  await marcar([s]); aviso(msg, 'Se generó el archivo ' + a.nombre + '. Envíelo al supervisor (por WhatsApp o correo).');
+}
+
 // ---------- arranque ----------
 $('#bNueva').onclick = function () { if (!$('#gNombre').value.trim()) { $('#gNombre').focus(); aviso($('#msgEnvio'), 'Escriba su nombre en "Mis datos" antes de capturar.', 1); return; } ls('op_guardia', $('#gNombre').value.trim()); ls('op_campo', $('#gCampo').value); abrirForm(); };
 $('#gCampo').onchange = function () { ls('op_campo', $('#gCampo').value); dibujar(); };
 $('#bCancelar').onclick = cerrarForm; $('#bGuardar').onclick = guardar; $('#fFecha').onchange = revisarExiste; $('#fCampo').onchange = revisarExiste;
+$('#rCampo').onchange = function () { $('#gCampo').value = $('#rCampo').value; ls('op_campo', $('#gCampo').value); dibujar(); }; $('#rSemana').onchange = dibujarResumen; $('#bEnviarSem').onclick = enviarSemana;
 $('#bExpPend').onclick = function () { exportar(false); }; $('#bExpTodo').onclick = function () { exportar(true); }; $('#bComp').onclick = compartir;
 $('#tPend').onclick = function () { filtro = 'pend'; dibujar(); }; $('#tTodo').onclick = function () { filtro = 'todo'; dibujar(); };
 iniciar();
